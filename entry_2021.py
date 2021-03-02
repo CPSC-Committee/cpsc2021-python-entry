@@ -5,7 +5,7 @@ import os
 import sys
 
 import wfdb
-from pan_tompkin import pan_tompkin
+from utils import pan_tomken, comp_cosEn
 
 
 def load_data(sample_path):
@@ -19,9 +19,10 @@ def challenge_entry(data_path, ans_path):
     test_set = open(os.path.join(data_path, RECORDS), 'r').read().splitlines()
     for i, test_sample in enumerate(test_set):
         sample_path = os.path.join(data_path, test_sample)
-        sig, length, fs = load_data(sample_path)
-        r_peaks = pan_tompkin(sig, fs=200, gr=1)
-        rr_interval = np.diff(r_peaks)
+        sig, _, fs = load_data(sample_path)
+        r_peaks = pan_tomken(sig, fs=200)
+        rr_seq = np.diff(r_peaks) / fs
+        
 
         
     return y_score
