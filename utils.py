@@ -111,7 +111,6 @@ def sampen(rr_seq, max_temp_len, r):
     return e, A, B
 
 def comp_cosEn(rr_segment):
-    max_RR = max(np.abs(rr_segment))
     r = 0.03 # initial value of the tolerance matching
     max_temp_len = 2 # maximum template length
     min_num_count = 5 # minimum numerator count
@@ -127,7 +126,16 @@ def comp_cosEn(rr_segment):
     else:
         cosEn = -1000
     sentropy = e[max_temp_len-1, 0]
-    minRR = min(rr_segment)
-    medFreq = np.median(1 / rr_segment)
 
-    return cosEn, sentropy, mRR, minRR, max_RR, medFreq
+    return cosEn, sentropy
+
+def load_dict(filename):
+    '''load dict from json file'''
+    with open(filename,"r") as json_file:
+	    dic = json.load(json_file)
+    return dic
+
+def save_dict(filename, dic):
+    '''save dict into json file'''
+    with open(filename,'w') as json_file:
+        json.dump(dic, json_file, ensure_ascii=False)

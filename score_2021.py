@@ -41,3 +41,5 @@ def load_ref(sample_file):
 
 def score(ref_path, ans_path):
     # AF burden estimation
+    test_set = open(os.path.join(data_path, RECORDS), 'r').read().splitlines()
+    for i, test_sample in enumerate(test_set):
