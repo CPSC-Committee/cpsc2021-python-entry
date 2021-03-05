@@ -5,7 +5,7 @@ import os
 import sys
 
 import wfdb
-from utils import pan_tomken, comp_cosEn, save_dict
+from utils import pan_tompkin, comp_cosEn, save_dict
 
 
 def load_data(sample_path):
@@ -27,13 +27,17 @@ def ngrams_seq(data, length, t_unit):
         grams.append(data[i: i+t_unit])
     return grams
 
-def challenge_entry(data_path):
-    sample_path = os.path.join(data_path, test_sample)
+def challenge_entry(sample_path):
+    """
+
+    """
+
     sig, _, fs = load_data(sample_path)
+    sig = sig[:, 1]
     y_seq = np.zeros((len(sig), ), dtype=np.int)
     end_points = []
 
-    r_peaks = pan_tomken(sig, fs=200)
+    _, _, r_peaks, _ = pan_tompkin(sig, fs=200)
     rr_seq = np.diff(r_peaks) / fs
     len_rr = len(rr_seq)
 
@@ -77,15 +81,29 @@ def challenge_entry(data_path):
             start_r = np.insert(start_r, 0, 0)
         if is_af[0] == 1:
             end_r = np.insert(end_r, len(end_r), len(is_af)-1)
-        end_points = np.concatenate((start_r, end_r), axis=-1).tolist()
+        start_end = np.concatenate((start_r, end_r), axis=-1).tolist()
+        end_points.append(start_end)
         for [start, end] in end_points:
             y_seq[r_peaks[start]: r_peaks[end]] += 1
         y_seq = ngrams_seq(y_seq, len(y_seq), t_unit)
         y_seq = np.sum(y_seq, axis=-1).flatten()
-        y_seq = y_seq > 0
-            
-    return y_seq, end_points, y_class
+        y_seq = (y_seq > 0).astype(int)
+    
+    pred_dcit = {'predict_sequence': y_seq, 'predict_endpoints': end_points, 'predict_class': y_class}
+    
+    return pred_dcit
 
 
 if __name__ == '__main__':
-    y_seq, end_points, y_class = challenge_entry(sys.argv[1], sys.argv[2])
+    DATA_PATH = sys.argv[1]
+    RESULT_PATH = sys.argv[2]
+    if not os.path.exists(RESULT_PATH):
+        os.makedirs(RESULT_PATH)
+        
+    test_set = open(os.path.join(DATA_PATH, RECORDS), 'r').read().splitlines()
+    for i, sample in enumerate(os.listdir(test_set)):
+        sample_path = os.path.join(DATA_PATH, sample)
+        pred_dict = challenge_entry(sample_path)
+
+        save_dict(os.path.join(RESULT_PATH, sample), pred_dict)
+
