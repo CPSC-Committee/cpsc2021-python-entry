@@ -105,5 +105,5 @@ if __name__ == '__main__':
         sample_path = os.path.join(DATA_PATH, sample)
         pred_dict = challenge_entry(sample_path)
 
-        save_dict(os.path.join(RESULT_PATH, sample), pred_dict)
+        save_dict(os.path.join(RESULT_PATH, sample+'.json'), pred_dict)
 
