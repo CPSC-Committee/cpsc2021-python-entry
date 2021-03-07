@@ -67,13 +67,13 @@ def challenge_entry(sample_path):
         y_seq = np.sum(y_seq, axis=-1).flatten()
         y_seq = y_seq > 0
     elif np.sum(is_af) == len(is_af):
-        y_class = 1
+        y_class = 2
         y_seq += 1
         y_seq = ngrams_seq(y_seq, len(y_seq), t_unit)
         y_seq = np.sum(y_seq, axis=-1).flatten()
         y_seq = y_seq > 0
     else:
-        y_class = 2
+        y_class = 1
         state_diff = np.diff(is_af)
         start_r = np.where(state_diff==1)[0] + 1
         end_r = np.where(state_diff==-1)[0] + 1
