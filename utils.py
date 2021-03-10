@@ -1,245 +1,282 @@
-import sys
+import json
 import numpy as np
+import sys
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import peakutils
 from sklearn import preprocessing
-from scipy import signal
+import scipy.signal as ss
+from scipy import io
+from scipy.signal import (
+	butter,filtfilt,
+	medfilt,iirnotch,
+	convolve
+)
+
+def qrs_detect(ECG, fs):
+	winsize = 5 * fs * 60 # 5min 滑窗
+	#winsize = 10 * fs # 10s 滑窗
+	NB_SAMP = len(ECG)
+	peaks = []
+	if NB_SAMP < winsize:
+		ecg_prep = preprocessing(fs).run(ECG)
+		peaks.extend(qrs_detection(fs, REF_PERIOD=0.22, THRES=0.08, debug=0).run(ecg_prep))
+		peaks = np.array(peaks)
+		peaks = np.delete(peaks, np.where(peaks >= NB_SAMP-2*fs)[0]) # 删除最后2sR波位置
+	else:
+		# 5分钟滑窗检测，重叠5s数据
+		count = NB_SAMP // winsize
+		for j in range(count+1):
+			if j == 0:
+				ecg_data = ECG[j*winsize: (j+1)*winsize]
+				ecg_prep = preprocessing(fs).run(ecg_data)
+
+				peak = qrs_detection(fs, REF_PERIOD=0.22, THRES=0.08, debug = 0).run(ecg_prep)
+				peak = np.array(peak)
+				peak = np.delete(peak, np.where(peak >= winsize-2*fs)[0]).tolist() # 删除5分钟窗口最后2sR波位置
+
+				peaks.extend(map(lambda n: n+j*winsize, peak))
+			elif j == count:
+				ecg_data = ECG[j*winsize-5*fs: ]
+				if len(ecg_data) == 0:
+					pass
+				else:
+					ecg_prep = preprocessing(fs).run(ecg_data)
+
+					peak = qrs_detection(fs, REF_PERIOD=0.22, THRES=0.08, debug = 0).run(ecg_prep)
+					peak = np.array(peak)
+					peak = np.delete(peak, np.where(peak <= 2*fs)[0]).tolist() # 删除最后多余窗口前2sR波位置
+
+					peaks.extend(map(lambda n: n+j*winsize-5*fs, peak))
+			else:
+				ecg_data = ECG[j*winsize-5*fs: (j+1)*winsize]
+				ecg_prep = preprocessing(fs).run(ecg_data)
+
+				peak = qrs_detection(fs, REF_PERIOD=0.22, THRES=0.08, debug = 0).run(ecg_prep)
+				peak = np.array(peak)
+				peak = np.delete(peak, np.where((peak <= 2*fs) | (peak >= winsize-2*fs))[0]).tolist() # 删除中间片段5分钟窗口前2s和最后2sR波位置
+
+				peaks.extend(map(lambda n: n+j*winsize-5*fs, peak))
+
+	peaks = np.array(peaks)
+	peaks = np.sort(peaks)
+	dp = np.abs(np.diff(peaks))
+
+	final_peaks = peaks[np.where(dp >= 0.2*fs)[0]+1]
+
+	return final_peaks
+
+class preprocessing(object):
+
+	def __init__(self, fs):
+		self.highpass = 15
+		self.swin = 30
+		self.lwin = 300
+
+		self.fs = fs
+		self.nyq = fs * 0.5
+		return
+
+	def __signal_reshape(self, signal):
+		signal = signal.reshape((-1, 1))
+
+		return signal, len(signal)
+
+	def __norm(self, signal):
+		normed_signal = signal / np.max(np.abs(signal))
+
+		return normed_signal
+
+	def __enhancement(self, signal):
+		signal = self.__remove_outliers(signal, 3)
+		signal2 = np.power(signal, 2)
+
+		swin_filter = np.ones((self.swin, 1))
+		lwin_filter = np.ones((self.lwin, 1))
+
+		signal2_sf = convolve(signal2, swin_filter, 'same', 'auto')
+		signal2_lf = convolve(signal2, lwin_filter, 'same', 'auto')
+
+		coeff = signal2_sf / (signal2_lf + 1e-3)
+		enhanced_signal = coeff * signal
+		enhanced_signal = self.__norm(enhanced_signal)
+
+		return enhanced_signal
+
+	def __remove_outliers(self, signal, t):
+		signalc = np.copy(signal)
+		std = np.std(signalc)
+		t_std = t * std
+		outliers = np.where(np.abs(signalc) > t_std)
+		signalc[outliers] = t_std
+		signalc = self.__norm(signalc)
+
+		return signalc
+
+	def __highpass_filter(self, signal, hpf):
+		hp = hpf / self.nyq
+		hpb, hpa = butter(5, hp, 'highpass')
+		hp_signal = filtfilt(hpb, hpa, signal, axis=0)
+		hp_signal = self.__norm(hp_signal)
+
+		return hp_signal
+
+	def __notch_filter(self, signal, ntf):
+		nt = ntf / self.nyq
+		ntb, nta = iirnotch(nt, 30)
+		nt_signal = filtfilt(ntb, nta, signal, axis=0)
+		nt_signal = self.__norm(nt_signal)
+
+		return nt_signal
+
+	def __median_filter(self, signal, size=5):
+		med_signal = medfilt(signal.flatten(), size).reshape((-1, 1))
+		med_signal = self.__norm(med_signal)
+		return med_signal
+
+	def run(self, signal):
+		# signal = self.__signal_reshape(signal)
+		md_signal = self.__median_filter(signal, 5)
+
+		fp_signal = self.__highpass_filter(md_signal, self.highpass)
+		fp_signal = self.__notch_filter(fp_signal, 50)
+		fp_signal = self.__enhancement(fp_signal)
+
+		prep_signal = fp_signal[:, -1]
+
+		return prep_signal
 
 
-def pan_tompkin(ecg_original, fs=1000, gr=1):
-    delay = 0
-    skip = 0
-    m_selected_RR = 0
-    mean_RR = 0
-    ser_back = 0 
-    
-    if (fs == 200):
-        # Low pass and High pass
-        # Low pass
-        wn = 12 * 2 / fs
-        N = 3                                                              
-        a, b = signal.butter(N, wn, 'low')
-        ecg_l = signal.filtfilt(a, b, ecg_original)
-        ecg_l = ecg_l / max(abs(ecg_l))
-        ecg_l = np.around(ecg_l, decimals=4)
+class qrs_detection(object):
 
-        # High pass
-        wn = 5 * 2 / fs
-        N = 3                                          
-        a, b = signal.butter(N, wn, 'high')                                        
-        ecg_h = signal.filtfilt(a, b, ecg_original) 
-        ecg_h = ecg_h / max(abs(ecg_h))
+	def __init__(self, fs, debug, REF_PERIOD, THRES):
+		self.REF_PERIOD = REF_PERIOD # 0.28  0.22
+		self.THRES = THRES  # 0.47  0.08
+		self.fs = fs
+		self.debug = debug
+		self.SEARCH_BACK = 1
+		self.MAX_FORCE = []
+		self.MED_SMOOTH_NB_COEFF = round(self.fs / 100)
+		self.INT_NB_COEFF = int(round(30 * self.fs / 256))
+		self.b1 = [-7.76134153004032e-05, -8.61340065700186e-07, -0.000235896265227759, -0.000218187348080493,
+		           -0.000669276661989076, -0.000895315769128474, -0.00177103523376593, -0.00261090269427532,
+		           -0.00436658562236147, -0.00654042051038359, -0.0100184331404942, -0.0147404490576768, -0.0213552862626397,
+		           -0.0304383713068943, -0.0422046489494271, -0.0579080696611326, -0.0771207767471077, -0.101522164227050,
+		           -0.129807529156737, -0.163496603270115, -0.200168449008964, -0.240386155222128, -0.280473635134792, -0.319366250886081,
+		           -0.352321273862402, -0.376564022211588,  -0.387067857380138, -0.380212957685603, -0.352156166419805, -0.300190214010979,
+		           -0.223478907410178, -0.122231287760963, 1.10369133101340e-19, 0.138912393694904, 0.286575666377766, 0.435190138017945,
+		           0.574355824775253, 0.695302079844553, 0.788508084499882, 0.847746151348478, 0.867773885805332, 0.847746151348478,
+		           0.788508084499882, 0.695302079844553, 0.574355824775253, 0.435190138017945, 0.286575666377766, 0.138912393694904,
+		           1.10369133101340e-19, -0.122231287760963, -0.223478907410178, -0.300190214010979, -0.352156166419805, -0.380212957685603,
+		           -0.387067857380138, -0.376564022211588, -0.352321273862402, -0.319366250886081, -0.280473635134792, -0.240386155222128,
+		           -0.200168449008964, -0.163496603270115, -0.129807529156737, -0.101522164227050, -0.0771207767471077, -0.0579080696611326,
+		           -0.0422046489494271, -0.0304383713068943, -0.0213552862626397, -0.0147404490576768, -0.0100184331404942, -0.00654042051038359,
+		           -0.00436658562236147, -0.00261090269427532, -0.00177103523376593, -0.000895315769128474, -0.000669276661989076, -0.000218187348080493,
+		           -0.000235896265227759, -8.61340065700213e-07, -7.76134153004032e-05, 6.77368189249316e-05]
+		return
 
-    else:
-        # Bandpass
-        f1 = 5                                                  
-        f2 = 15
-        wn = []
-        wn.append(f1 * 2 / fs)
-        wn.append(f2 * 2 / fs)
-        N = 3                                                     
-        a, b = signal.butter(N, wn, 'bandpass')                                                  
-        ecg_h = signal.filtfilt(a, b, ecg_original)
-        ecg_h = ecg_h / max(abs(ecg_h))
+	def __gqrs(self, ecg):
+		NB_SAMP = np.size(ecg)
+		tm = np.arange(1 / self.fs, np.ceil(NB_SAMP / self.fs), 1 / self.fs).reshape((-1, 1))
+		#tm = np.expand_dims(np.arange(1 / self.fs, np.ceil(NB_SAMP / self.fs), 1 / self.fs), -1)
+		maxval = []
+		maxloc = []
+		qrs_pre = []
 
-    # Derivative
-    int_c = (5 - 1) / (fs * 1 / 40)
-    x = np.arange(1,6)
-    xp = np.dot(np.array([1, 2, 0, -2, -1]), (1 / 8) * fs)
-    fp = np.arange(1,5+int_c,int_c)
-    b = np.interp(fp, x, xp)
-    ecg_d = signal.filtfilt(b, 1, ecg_h)
-    ecg_d = ecg_d / max(ecg_d)
+		bandpass_signal = ss.filtfilt(self.b1, 1, ecg)
+		bpfecg = bandpass_signal[0:NB_SAMP]
 
-    # Squaring and Moving average
-    ecg_s = np.power(ecg_d, 2)
-    ecg_m = np.convolve(ecg_s ,np.ones(int(np.around(0.150*fs)))/np.around(0.150*fs))
-    delay = delay + np.around(0.150*fs) / 2
+		dffecg = np.diff(bpfecg)
+		sqrecg = np.power(dffecg, 2)
+		sqrecg = sqrecg.reshape((-1, 1))[:, -1]
+		intecg = ss.lfilter(np.ones(self.INT_NB_COEFF), np.ones(1), sqrecg)
+		mdfint = ss.medfilt(intecg, 5)
+		delay = np.ceil(self.INT_NB_COEFF / 2)
+		delay = int(delay)
+		mdfint = np.roll(mdfint, -delay)
+		mdfint = mdfint / np.max(np.abs(mdfint))
 
-    # Fiducial Marks
-    locs = peakutils.indexes(ecg_m, thres=0, min_dist=np.around(0.2 * fs))
-    pks = ecg_m[locs[:]]
+		if self.debug:
+			plt.figure(figsize=(60, 12))
+			plt.plot(ecg)
+			plt.plot(mdfint)
+			plt.title('Prep + normalization')
+			plt.show()
+		if NB_SAMP / self.fs > 90:
+			xs = np.sort(mdfint[self.fs:self.fs * 90])
+		else:
+			xs = np.sort(mdfint[self.fs:-1])
 
-    # Init other parameters
-    LLp = len(pks)
-    qrs_c = np.zeros(LLp)
-    qrs_i = np.zeros(LLp)
-    qrs_i_raw = np.zeros(LLp)
-    qrs_amp_raw= np.zeros(LLp)
-    nois_c = np.zeros(LLp)
-    nois_i = np.zeros(LLp)
-    SIGL_buf = np.zeros(LLp)
-    NOISL_buf = np.zeros(LLp)
-    SIGL_buf1 = np.zeros(LLp)
-    NOISL_buf1 = np.zeros(LLp)
-    THRS_buf1 = np.zeros(LLp)
-    THRS_buf = np.zeros(LLp)
+		if len(self.MAX_FORCE) == 0:
+			if NB_SAMP / self.fs > 10:
+				ind_xs = int(np.ceil(98 / 100 * len(xs)))
+				en_thres = xs[ind_xs]
+			else:
+				ind_xs = int(np.ceil(99 / 100 * len(xs)))
+				en_thres = xs[ind_xs]
+		else:
+			en_thres = self.MAX_FORCE
+		poss_reg = mdfint > (self.THRES * en_thres)
+		if len(poss_reg) == 0:
+			poss_reg[9] = 1
 
-    # Init training phase
-    THR_SIG = max(ecg_m[0:2*fs])*1/3
-    THR_NOISE = np.mean(ecg_m[0:2*fs])*1/2
-    SIG_LEV= THR_SIG
-    NOISE_LEV = THR_NOISE
+		if self.SEARCH_BACK:
+			indAboveThreshold = np.where(poss_reg)[0]
+			RRv = np.diff(tm[indAboveThreshold][:, -1])
+			medRRv = np.median(RRv[np.where(RRv > 0.01)[0]])
+			indMissedBeat = np.where(RRv > 1.5 * medRRv)[0]
+			indStart = indAboveThreshold[indMissedBeat]
+			indEnd = indAboveThreshold[indMissedBeat + 1]
 
+			for i in range(len(indStart)):
+				poss_reg[indStart[i]: indEnd[i]] = mdfint[indStart[i]: indEnd[i]] > (0.5 * self.THRES * en_thres)
+		poss_reg = poss_reg.astype(int)
+		left = np.where(np.diff(np.pad(poss_reg, ((1, 0)), 'constant')) == 1)[0]
+		right = np.where(np.diff(np.pad(poss_reg, ((0, 1)), 'constant')) == -1)[0]
 
-    # Init bandpath filter threshold
-    THR_SIG1 = max(ecg_h[0:2*fs])*1/3
-    THR_NOISE1 = np.mean(ecg_h[0:2*fs])*1/2
-    SIG_LEV1 = THR_SIG1                      
-    NOISE_LEV1 = THR_NOISE1
+		nbs = int(len(left < 30 * self.fs))
+		for i in range(nbs):
+			if left[i] == right[i]:
+				right[i] += 1
 
-    # Thresholding and desicion rule
-    Beat_C = -1
-    Beat_C1 = -1
-    Noise_Count = 0
+		loc = np.zeros(nbs, dtype=int)
+		for j in range(nbs):
+			loc[j] = np.argmax(np.abs(bpfecg[left[j]: right[j]]))
+			loc[j] = int(loc[j] - 1 + left[j])
+		sign = np.mean(bpfecg[loc])
 
-    for i in range(LLp):
-        if ((locs[i] - np.around(0.150*fs)) >= 1 and (locs[i] <= len(ecg_h))):
-            _start = locs[i] - np.around(0.15*fs).astype(int)
-            _ = ecg_h[_start:locs[i]]
-            y_i = max(_)
-            x_i = np.argmax(_)
-        else:
-            if i == 0:
-                y_i = max(ecg_h[0:locs[i]])
-                x_i = np.argmax(ecg_h[0:locs[i]])
-                ser_back = 1
-            elif (locs[i] >= len[ecg_h]):
-                _ = ecg_h[locs[i] - np.around(0.150*fs).astype(int):]
-                y_i = max(_)
-                x_i = np.argmax(_)
+		for i in range(len(left)):
+			if sign > 0:
+				maxval.append(np.max(bpfecg[left[i]:right[i]]))
+				maxloc.append(np.argmax(bpfecg[left[i]:right[i]]))
+			else:
+				maxval.append(np.min(bpfecg[left[i]:right[i]]))
+				maxloc.append(np.argmin(bpfecg[left[i]:right[i]]))
+			maxloc_int = list(map(int, maxloc))
+			qrs_pre.append(maxloc_int[i] - 1 + left[i])
 
-        # Update the heart_rate    
-        if (Beat_C >= 9):
-            diffRR = np.diff(qrs_i[Beat_C-8:Beat_C])
-            mean_RR = np.mean(diffRR)
-            comp = qrs_i[Beat_C] - qrs_i[Beat_C-1]
-            if ((comp <= 0.92*mean_RR) or (comp >= 1.16*mean_RR)):
-                THR_SIG = 0.5*(THR_SIG)
-                THR_SIG1 = 0.5*(THR_SIG1)               
-            else:
-                m_selected_RR = mean_RR
+			if i > 0:
+				if (qrs_pre[-1] - qrs_pre[-2] < self.fs * self.REF_PERIOD) & (np.abs(maxval[-1]) >= np.abs(maxval[-2])):
+					del qrs_pre[-2]
+				elif (qrs_pre[-1] - qrs_pre[-2] < self.fs * self.REF_PERIOD) & (
+						np.abs(maxval[-1]) < np.abs(maxval[-2])):
+					qrs_pre.pop()
 
-        # Calculate the mean last 8 R waves to ensure that QRS is not
-        if m_selected_RR:
-            test_m = m_selected_RR
-        elif (mean_RR and m_selected_RR == 0):
-            test_m = mean_RR
-        else:
-            test_m = 0
+		qrs_pos = qrs_pre
+		if self.debug:
+			plt.figure(figsize=(60, 12))
+			plt.plot(ecg)
+			plt.plot(qrs_pre,ecg[qrs_pos],'ro')
+			plt.show()
 
-        if test_m:
-            if ((locs[i] - qrs_i[Beat_C]) >= np.around(1.66*test_m)):
-                _start = int(qrs_i[Beat_C] + np.around(0.20*fs))
-                _end = int(locs[i] - np.around(0.20*fs))
-                pks_temp = max(ecg_m[_start:_end+1])
-                locs_temp = np.argmax(ecg_m[_start:_end+1])
-                locs_temp = qrs_i[Beat_C] + np.around(0.20*fs) + locs_temp - 1
+		return qrs_pos
 
-                if (pks_temp > THR_NOISE):
-                    Beat_C += 1
-                    qrs_c[Beat_C] = pks_temp
-                    qrs_i[Beat_C] = locs_temp
+	def run(self, signal):
 
-                    if (locs_temp <= len(ecg_h)):
-                        _start = int(locs_temp - np.around(0.150*fs))
-                        _end = int(locs_temp + 1)
-                        y_i_t = max(ecg_h[_start:_end])
-                        x_i_t = np.argmax(ecg_h[_start:_end])
-                    else:
-                        _ = locs_temp - np.around(0.150*fs)
-                        y_i_t = max(ecg_h[_:])
-                        x_i_t = np.argmax(ecg_h[_:])
+		qrs_pos = self.__gqrs(signal)
 
-                    if (y_i_t > THR_NOISE1):
-                        Beat_C1 += 1
-                        qrs_i_raw[Beat_C1] = locs_temp - np.around(0.150*fs) + (x_i_t - 1)
-                        qrs_amp_raw[Beat_C1] = y_i_t
-                        SIG_LEV1 = 0.25*y_i_t + 0.75*SIG_LEV1
-
-                    not_nois = 1
-                    SIG_LEV = 0.25*pks_temp + 0.75*SIG_LEV       
-            else:
-                not_nois = 0
-
-        # Find noise and QRS peaks
-        if (pks[i] >= THR_SIG): 
-            if (Beat_C >= 3):
-                if ((locs[i] - qrs_i[Beat_C]) <= np.around(0.3600*fs)):
-                    _start = locs[i] - np.around(0.075*fs).astype('int')
-                    Slope1 = np.mean(np.diff(ecg_m[_start:locs[i]]))
-                    _start = int(qrs_i[Beat_C] - np.around(0.075*fs))
-                    _end = int(qrs_i[Beat_C])
-                    Slope2 = np.mean(np.diff(ecg_m[_start:_end]))
-                    if abs(Slope1) <= abs(0.5*(Slope2)):
-                        nois_c[Noise_Count] = pks[i]
-                        nois_i[Noise_Count] = locs[i]
-                        Noise_Count += 1
-                        skip = 1
-                        NOISE_LEV1 = 0.125*y_i + 0.875*NOISE_LEV1
-                        NOISE_LEV = 0.125*pks[i] + 0.875*NOISE_LEV
-                    else:
-                        skip = 0
-
-            if (skip == 0):
-                Beat_C += 1
-                qrs_c[Beat_C] = pks[i]
-                qrs_i[Beat_C] = locs[i]
-
-                if (y_i >= THR_SIG1):
-                    Beat_C1 += 1
-                    if ser_back:
-                        qrs_i_raw[Beat_C1] = x_i
-                    else:
-                        qrs_i_raw[Beat_C1] = locs[i] - np.around(0.150*fs) + (x_i - 1)
-
-                    qrs_amp_raw[Beat_C1] =  y_i
-                    SIG_LEV1 = 0.125*y_i + 0.875*SIG_LEV1
-
-                SIG_LEV = 0.125*pks[i] + 0.875*SIG_LEV
-
-        elif ((THR_NOISE <= pks[i]) and (pks[i] < THR_SIG)):
-            NOISE_LEV1 = 0.125*y_i + 0.875*NOISE_LEV1
-            NOISE_LEV = 0.125*pks[i] + 0.875*NOISE_LEV     
-        elif (pks[i] < THR_NOISE):
-            nois_c[Noise_Count] = pks[i]
-            nois_i[Noise_Count] = locs[i]    
-            NOISE_LEV1 = 0.125*y_i + 0.875*NOISE_LEV1    
-            NOISE_LEV = 0.125*pks[i] + 0.875*NOISE_LEV
-            Noise_Count += 1
-
-        # Adjust the threshold with SNR
-        if (NOISE_LEV != 0 or SIG_LEV != 0):
-            THR_SIG = NOISE_LEV + 0.25*(abs(SIG_LEV - NOISE_LEV))
-            THR_NOISE = 0.5*(THR_SIG)
-
-        if (NOISE_LEV1 != 0 or SIG_LEV1 != 0):
-            THR_SIG1 = NOISE_LEV1 + 0.25*(abs(SIG_LEV1 - NOISE_LEV1))
-            THR_NOISE1 = 0.5*(THR_SIG1)
-
-        SIGL_buf[i] = SIG_LEV
-        NOISL_buf[i] = NOISE_LEV
-        THRS_buf[i] = THR_SIG
-
-        SIGL_buf1[i] = SIG_LEV1
-        NOISL_buf1[i] = NOISE_LEV1
-        THRS_buf1[i] = THR_SIG1
-
-        skip = 0                                                  
-        not_nois = 0
-        ser_back = 0
-
-    # Adjust lengths
-    qrs_i_raw = qrs_i_raw[0: Beat_C1+1]
-    qrs_i_raw = np.array(qrs_i_raw).astype(np.int16)
-    qrs_amp_raw = qrs_amp_raw[0:Beat_C1+1]
-    qrs_c = qrs_c[0:Beat_C+1]
-    qrs_i = qrs_i[0:Beat_C+1]
-
-    print(qrs_i_raw)
-
-    return ecg_h, qrs_amp_raw, qrs_i_raw, delay
+		return qrs_pos
 
 def sampen(rr_seq, max_temp_len, r):
     """

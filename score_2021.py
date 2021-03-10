@@ -2,15 +2,12 @@
 
 import numpy as np
 import math
+import json
 import os
 import sys
-import glob
 
 from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
 import wfdb
-
-from entry_2021 import challenge_entry
-from utils import load_dict
 
 
 class RefInfo():
@@ -108,9 +105,9 @@ def load_ans(ans_file):
     with open(ans_file, "r") as json_file:
         ans_dic = json.load(json_file)
     
-    y_pred = result['predict_sequence']
-    endpoints_pred = result['predict_endpoints']
-    class_pred = result['predict_class']
+    y_pred = ans_dic['predict_sequence']
+    endpoints_pred = ans_dic['predict_endpoints']
+    class_pred = ans_dic['predict_class']
 
     return y_pred, endpoints_pred, class_pred
 
@@ -148,7 +145,7 @@ def score(data_path, ans_path):
     PRED_CLASS = []
     ENDPOINTSCORE = []
 
-    test_set = open(os.path.join(data_path, RECORDS), 'r').read().splitlines()
+    test_set = open(os.path.join(data_path, 'RECORDS'), 'r').read().splitlines()
     for i, test_sample in enumerate(test_set):
         sample_path = os.path.join(data_path, test_sample)
         y_pred, endpoints_pred, class_pred = load_ans(os.path.join(ans_path, test_sample+'.json'))
@@ -180,12 +177,3 @@ if __name__ == '__main__':
         print('AF Endpoints Detection Performance: %0.4f' %af_endpoint_score, file=score_file)
 
         score_file.close()
-
-
-
-
-
-
-
-
-

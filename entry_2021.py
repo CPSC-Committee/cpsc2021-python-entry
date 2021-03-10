@@ -5,7 +5,7 @@ import os
 import sys
 
 import wfdb
-from utils import pan_tompkin, comp_cosEn, save_dict
+from utils import qrs_detect, comp_cosEn, save_dict
 
 
 def load_data(sample_path):
@@ -37,7 +37,8 @@ def challenge_entry(sample_path):
     y_seq = np.zeros((len(sig), ), dtype=np.int)
     end_points = []
 
-    _, _, r_peaks, _ = pan_tompkin(sig, fs=200)
+    r_peaks = qrs_detect(sig, fs=200)
+    print(r_peaks)
     rr_seq = np.diff(r_peaks) / fs
     len_rr = len(rr_seq)
 
@@ -77,18 +78,23 @@ def challenge_entry(sample_path):
         state_diff = np.diff(is_af)
         start_r = np.where(state_diff==1)[0] + 1
         end_r = np.where(state_diff==-1)[0] + 1
+        print(start_r)
+        print(end_r)
         if is_af[0] == 1:
             start_r = np.insert(start_r, 0, 0)
-        if is_af[0] == 1:
+        if is_af[-1] == 1:
             end_r = np.insert(end_r, len(end_r), len(is_af)-1)
-        start_end = np.concatenate((start_r, end_r), axis=-1).tolist()
-        end_points.append(start_end)
+        start_r = np.expand_dims(start_r, -1)
+        end_r = np.expand_dims(end_r, -1)
+        start_end = np.concatenate((r_peaks[start_r], r_peaks[end_r]), axis=-1).tolist()
+        end_points.extend(start_end)
         for [start, end] in end_points:
-            y_seq[r_peaks[start]: r_peaks[end]] += 1
+            y_seq[start: end] += 1
         y_seq = ngrams_seq(y_seq, len(y_seq), t_unit)
         y_seq = np.sum(y_seq, axis=-1).flatten()
         y_seq = (y_seq > 0).astype(int)
-    
+
+    y_seq = y_seq.tolist()  
     pred_dcit = {'predict_sequence': y_seq, 'predict_endpoints': end_points, 'predict_class': y_class}
     
     return pred_dcit
@@ -100,8 +106,9 @@ if __name__ == '__main__':
     if not os.path.exists(RESULT_PATH):
         os.makedirs(RESULT_PATH)
         
-    test_set = open(os.path.join(DATA_PATH, RECORDS), 'r').read().splitlines()
-    for i, sample in enumerate(os.listdir(test_set)):
+    test_set = open(os.path.join(DATA_PATH, 'RECORDS'), 'r').read().splitlines()
+    for i, sample in enumerate(test_set):
+        print(sample)
         sample_path = os.path.join(DATA_PATH, sample)
         pred_dict = challenge_entry(sample_path)
 
