@@ -6,7 +6,8 @@ import json
 import os
 import sys
 
-from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
+import scipy.io as sio
+from sklearn.metrics import precision_recall_curve, auc
 import wfdb
 
 
@@ -86,8 +87,6 @@ class RefInfo():
             onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += 1.5
             onset_range[self.beat_loc[af_start-3]: self.beat_loc[af_start-2]] += 1
             onset_range[self.beat_loc[af_start+3]: self.beat_loc[af_start+4]] += 1
-            onset_range[self.beat_loc[af_start-5]: self.beat_loc[af_start-3]] += 0.5
-            onset_range[self.beat_loc[af_start+4]: self.beat_loc[af_start+6]] += 0.5
             onset_range[self.beat_loc[af_start-3]: self.beat_loc[af_start+4]] *= weights[i]
         for i, af_end in enumerate(self.af_ends):
             offset_range[self.beat_loc[af_end-1]: self.beat_loc[af_end+2]] += 2.5
@@ -95,19 +94,25 @@ class RefInfo():
             offset_range[self.beat_loc[af_end+2]: self.beat_loc[af_end+3]] += 1.5
             offset_range[self.beat_loc[af_end-3]: self.beat_loc[af_end-2]] += 1
             offset_range[self.beat_loc[af_end+3]: self.beat_loc[af_end+4]] += 1
-            offset_range[self.beat_loc[af_end-5]: self.beat_loc[af_end-3]] += 0.5
-            offset_range[self.beat_loc[af_end+4]: self.beat_loc[af_end+6]] += 0.5
             offset_range[self.beat_loc[af_end-3]: self.beat_loc[af_end+4]] *= weights[i]
         
         return onset_range, offset_range
     
 def load_ans(ans_file):
-    with open(ans_file, "r") as json_file:
+    if ans_file.endswith('.json'):
+        json_file = open(ans_file, "r")
         ans_dic = json.load(json_file)
-    
-    y_pred = ans_dic['predict_sequence']
-    endpoints_pred = ans_dic['predict_endpoints']
-    class_pred = ans_dic['predict_class']
+        
+        y_pred = ans_dic['predict_sequence']
+        endpoints_pred = ans_dic['predict_endpoints']
+        class_pred = ans_dic['predict_class']
+
+    elif ans_file.endswith('.mat'):
+        ans_struct = sio.loadmat(ans_file):
+
+        y_pred = ans_struct['predict_sequence']
+        endpoints_pred = ans_struct['predict_endpoints']
+        class_pred = ans_struct['predict_class']
 
     return y_pred, endpoints_pred, class_pred
 
@@ -145,10 +150,15 @@ def score(data_path, ans_path):
     PRED_CLASS = []
     ENDPOINTSCORE = []
 
-    test_set = open(os.path.join(data_path, 'RECORDS'), 'r').read().splitlines()
-    for i, test_sample in enumerate(test_set):
-        sample_path = os.path.join(data_path, test_sample)
-        y_pred, endpoints_pred, class_pred = load_ans(os.path.join(ans_path, test_sample+'.json'))
+    def is_mat_or_json(file):
+        return (file.endswith('.json')) + (file.endswith('.mat'))
+    ans_set = filter(is_mat_or_json, os.listdir(ans_path))
+    # test_set = open(os.path.join(data_path, 'RECORDS'), 'r').read().splitlines()
+    for i, ans_sample in enumerate(ans_set):
+        sample_nam = ans_sample.split('.')[0]
+        sample_path = os.path.join(data_path, sample_nam)
+            
+        y_pred, endpoints_pred, class_pred = load_ans(os.path.join(ans_path, ans_sample))
         TrueRef = RefInfo(sample_path)
 
         TRUE_CLASS.append(TrueRef.class_true)
