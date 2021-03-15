@@ -16,17 +16,17 @@ R = np.array([[1, -1, -.5], [-2, 1, 0], [-1, 0, 1]])
 class RefInfo():
     def __init__(self, sample_path):
         self.sample_path = sample_path
-        self.fs, self.len_sig, self.beat_loc, self.af_starts, self.af_ends, self.class_true = _load_ref()
+        self.fs, self.len_sig, self.beat_loc, self.af_starts, self.af_ends, self.class_true = self._load_ref()
         self.endpoints_true = np.concatenate((self.af_starts, self.af_ends), axis=-1)
 
         if self.class_true == 1 or 2:
-            self.onset_score_range, self.offset_score_range = _gen_endpoint_score_range()
+            self.onset_score_range, self.offset_score_range = self._gen_endpoint_score_range()
         else:
             self.onset_score_range, self.offset_score_range = None, None
 
     def _load_ref(self):
-        sig, fields = wfdb.rdsamp(self.sample_file)
-        ann_ref = wfdb.rdann(self.sample_file, 'atr')
+        sig, fields = wfdb.rdsamp(self.sample_path)
+        ann_ref = wfdb.rdann(self.sample_path, 'atr')
 
         fs = fields['fs']
         length = len(sig)
@@ -75,7 +75,7 @@ def load_ans(ans_file):
         endpoints_pred = np.array(ans_dic['predict_endpoints'])
 
     elif ans_file.endswith('.mat'):
-        ans_struct = sio.loadmat(ans_file):
+        ans_struct = sio.loadmat(ans_file)
         endpoints_pred = ans_struct['predict_endpoints']
 
     return endpoints_pred
@@ -84,6 +84,7 @@ def ue_calculate(endpoints_pred, endpoints_true, onset_score_range, offset_score
     score = 0
     ma = len(endpoints_true)
     mr = len(endpoints_pred)
+
     for [start, end] in endpoints_pred:
         score += onset_score_range[int(start)]
         score += offset_score_range[int(end)]
@@ -119,10 +120,14 @@ def score(data_path, ans_path):
         else:
             class_pred = 1
 
-        ur_score = ue_calculate(TrueRef.class_true, class_pred)
+        ur_score = ur_calculate(TrueRef.class_true, class_pred)
 
-        if TrueRef.class_true == 1 or 2:
-            ue_score = ue_calculate(endpoints_pred, TrueRef.onset_score_range, TrueRef.offset_score_range)
+        if TrueRef.class_true == 1 or TrueRef.class_true == 2:
+            print(TrueRef.endpoints_true)
+            ue_score = ue_calculate(endpoints_pred, TrueRef.endpoints_true, TrueRef.onset_score_range, TrueRef.offset_score_range)
+        else:
+            ue_score = 0
+
         u = ur_score + ue_score
         SCORE.append(u)
 

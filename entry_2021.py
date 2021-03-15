@@ -55,7 +55,7 @@ def challenge_entry(sample_path):
     is_af = np.concatenate((is_af, np.array([is_af_last] * len_rr_remain).flatten()), axis=0)
 
     if np.sum(is_af) == len(is_af):
-        end_points.extend([0, len(sig)-1])
+        end_points.append([0, len(sig)-1])
     elif np.sum(is_af) != 0:
         state_diff = np.diff(is_af)
         start_r = np.where(state_diff==1)[0] + 1
