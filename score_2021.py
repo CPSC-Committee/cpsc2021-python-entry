@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
 import numpy as np
-import math
 import json
 import os
 import sys
 
 import scipy.io as sio
-from sklearn.metrics import precision_recall_curve, auc
 import wfdb
 
 
@@ -19,7 +17,7 @@ class RefInfo():
         self.fs, self.len_sig, self.beat_loc, self.af_starts, self.af_ends, self.class_true = self._load_ref()
         self.endpoints_true = np.concatenate((self.af_starts, self.af_ends), axis=-1)
 
-        if self.class_true == 1 or 2:
+        if self.class_true == 1 or self.class_true == 2:
             self.onset_score_range, self.offset_score_range = self._gen_endpoint_score_range()
         else:
             self.onset_score_range, self.offset_score_range = None, None
@@ -32,10 +30,10 @@ class RefInfo():
         length = len(sig)
         sample_descrip = fields['comments']
 
-        beat_loc = ann_ref.sample # r-peak locations
-        ann_note = ann_ref.aux_note # rhythm change flag
+        beat_loc = np.array(ann_ref.sample) # r-peak locations
+        ann_note = np.array(ann_ref.aux_note) # rhythm change flag
 
-        af_start_scripts = np.where((ann_note=='(AFIB') or (ann_note=='(AFL'))[0]
+        af_start_scripts = np.where((ann_note=='(AFIB') | (ann_note=='(AFL'))[0]
         af_end_scripts = np.where(ann_note=='(N')[0]
 
         if 'non atrial fibrillation' in sample_descrip:
@@ -58,13 +56,33 @@ class RefInfo():
         onset_range = np.zeros((self.len_sig, ),dtype=np.float)
         offset_range = np.zeros((self.len_sig, ),dtype=np.float)
         for i, af_start in enumerate(self.af_starts):
-            onset_range[self.beat_loc[max(af_start-1, 0)]: self.beat_loc[af_start+2]] += 1
-            onset_range[self.beat_loc[max(af_start-2, 0)]: self.beat_loc[max(af_start-1, 0)]] += .5
-            onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += .5
+            if self.class_true == 1:
+                if max(af_start-1, 0) == 0:
+                    onset_range[: self.beat_loc[af_start+2]] += 1
+                elif max(af_start-2, 0) == 0:
+                    onset_range[self.beat_loc[af_start-1]: self.beat_loc[af_start+2]] += 1
+                    onset_range[: self.beat_loc[af_start-1]] += .5
+                else:
+                    onset_range[self.beat_loc[af_start-1]: self.beat_loc[af_start+2]] += 1
+                    onset_range[self.beat_loc[af_start-2]: self.beat_loc[af_start-1]] += .5
+                onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += .5
+            elif self.class_true == 2:
+                onset_range[: self.beat_loc[af_start+2]] += 1
+                onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += .5
         for i, af_end in enumerate(self.af_ends):
-            offset_range[self.beat_loc[af_end-1]: self.beat_loc[min(af_end+2, self.len_sig-1)]] += 1
-            offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end-1]] += .5
-            offset_range[self.beat_loc[min(af_end+2, self.len_sig-1)]: self.beat_loc[min(af_end+3, self.len_sig-1)]] += .5
+            if self.class_true == 1:
+                if min(af_end+2, len(self.beat_loc)-1) == len(self.beat_loc)-1:
+                    offset_range[self.beat_loc[af_end-1]: ] += 1
+                elif min(af_end+3, len(self.beat_loc)-1) == len(self.beat_loc)-1:
+                    offset_range[self.beat_loc[af_end-1]: self.beat_loc[af_end+2]] += 1
+                    offset_range[self.beat_loc[af_end+2]: ] += 0.5
+                else:
+                    offset_range[self.beat_loc[af_end-1]: self.beat_loc[af_end+2]] += 1
+                    offset_range[self.beat_loc[af_end+2]: min(self.beat_loc[af_end+3], self.len_sig-1)] += .5
+                offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end-1]] += .5 
+            elif self.class_true == 2:
+                offset_range[self.beat_loc[af_end-1]: ] += 1
+                offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end-1]] += .5
         
         return onset_range, offset_range
     
@@ -123,7 +141,6 @@ def score(data_path, ans_path):
         ur_score = ur_calculate(TrueRef.class_true, class_pred)
 
         if TrueRef.class_true == 1 or TrueRef.class_true == 2:
-            print(TrueRef.endpoints_true)
             ue_score = ue_calculate(endpoints_pred, TrueRef.endpoints_true, TrueRef.onset_score_range, TrueRef.offset_score_range)
         else:
             ue_score = 0
@@ -136,10 +153,10 @@ def score(data_path, ans_path):
     return score_avg
 
 if __name__ == '__main__':
-    af_event_score, af_endpoint_score = score(sys.argv[1], sys.argv[2])
+    score_avg = score(sys.argv[1], sys.argv[2])
     print('AF Endpoints Detection Performance: %0.4f' %score_avg)
 
-    with open('score.txt', 'w') as score_file:
+    with open(os.path.join(sys.argv[2], 'score.txt'), 'w') as score_file:
         print('AF Endpoints Detection Performance: %0.4f' %score_avg, file=score_file)
 
         score_file.close()
