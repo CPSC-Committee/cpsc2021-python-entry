@@ -21,12 +21,6 @@ def ngrams_rr(data, length):
         grams.append(data[i: i+12])
     return grams
 
-def ngrams_seq(data, length, t_unit):
-    grams = []
-    for i in range(0, length-t_unit, t_unit):
-        grams.append(data[i: i+t_unit])
-    return grams
-
 def challenge_entry(sample_path):
     """
 
@@ -34,7 +28,6 @@ def challenge_entry(sample_path):
 
     sig, _, fs = load_data(sample_path)
     sig = sig[:, 1]
-    y_seq = np.zeros((len(sig), ), dtype=np.int)
     end_points = []
 
     r_peaks = qrs_detect(sig, fs=200)
@@ -42,7 +35,6 @@ def challenge_entry(sample_path):
     rr_seq = np.diff(r_peaks) / fs
     len_rr = len(rr_seq)
 
-    t_unit = int(fs * 0.5)
     rr_seq_slice = ngrams_rr(rr_seq, len_rr)
     is_af = []
     for rr_period in rr_seq_slice:
@@ -61,25 +53,14 @@ def challenge_entry(sample_path):
     
     len_rr_remain = len_rr - int(12*len(rr_seq_slice))
     is_af = np.concatenate((is_af, np.array([is_af_last] * len_rr_remain).flatten()), axis=0)
-    
-    if np.sum(is_af) == 0:
-        y_class = 0
-        y_seq = ngrams_seq(y_seq, len(y_seq), t_unit)
-        y_seq = np.sum(y_seq, axis=-1).flatten()
-        y_seq = y_seq > 0
-    elif np.sum(is_af) == len(is_af):
-        y_class = 2
-        y_seq += 1
-        y_seq = ngrams_seq(y_seq, len(y_seq), t_unit)
-        y_seq = np.sum(y_seq, axis=-1).flatten()
-        y_seq = y_seq > 0
-    else:
-        y_class = 1
+
+    if np.sum(is_af) == len(is_af):
+        end_points.extend([0, len(sig)-1])
+    elif np.sum(is_af) != 0:
         state_diff = np.diff(is_af)
         start_r = np.where(state_diff==1)[0] + 1
         end_r = np.where(state_diff==-1)[0] + 1
-        print(start_r)
-        print(end_r)
+
         if is_af[0] == 1:
             start_r = np.insert(start_r, 0, 0)
         if is_af[-1] == 1:
@@ -88,14 +69,8 @@ def challenge_entry(sample_path):
         end_r = np.expand_dims(end_r, -1)
         start_end = np.concatenate((r_peaks[start_r], r_peaks[end_r]), axis=-1).tolist()
         end_points.extend(start_end)
-        for [start, end] in end_points:
-            y_seq[start: end] += 1
-        y_seq = ngrams_seq(y_seq, len(y_seq), t_unit)
-        y_seq = np.sum(y_seq, axis=-1).flatten()
-        y_seq = (y_seq > 0).astype(int)
-
-    y_seq = y_seq.tolist()  
-    pred_dcit = {'predict_sequence': y_seq, 'predict_endpoints': end_points, 'predict_class': y_class}
+        
+    pred_dcit = {'predict_endpoints': end_points}
     
     return pred_dcit
 
