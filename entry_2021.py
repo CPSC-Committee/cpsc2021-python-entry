@@ -23,7 +23,7 @@ def ngrams_rr(data, length):
 
 def challenge_entry(sample_path):
     """
-
+    This is a baseline method.
     """
 
     sig, _, fs = load_data(sample_path)

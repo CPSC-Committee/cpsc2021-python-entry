@@ -71,22 +71,23 @@ class RefInfo():
                 onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += .5
         for i, af_end in enumerate(self.af_ends):
             if self.class_true == 1:
-                if min(af_end+2, len(self.beat_loc)-1) == len(self.beat_loc)-1:
-                    offset_range[self.beat_loc[af_end-1]: ] += 1
-                elif min(af_end+3, len(self.beat_loc)-1) == len(self.beat_loc)-1:
-                    offset_range[self.beat_loc[af_end-1]: self.beat_loc[af_end+2]] += 1
-                    offset_range[self.beat_loc[af_end+2]: ] += 0.5
+                if min(af_end+1, len(self.beat_loc)-1) == len(self.beat_loc)-1:
+                    offset_range[self.beat_loc[af_end-2]: ] += 1
+                elif min(af_end+2, len(self.beat_loc)-1) == len(self.beat_loc)-1:
+                    offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end+1]] += 1
+                    offset_range[self.beat_loc[af_end+1]: ] += 0.5
                 else:
-                    offset_range[self.beat_loc[af_end-1]: self.beat_loc[af_end+2]] += 1
-                    offset_range[self.beat_loc[af_end+2]: min(self.beat_loc[af_end+3], self.len_sig-1)] += .5
-                offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end-1]] += .5 
+                    offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end+1]] += 1
+                    offset_range[self.beat_loc[af_end+1]: min(self.beat_loc[af_end+2], self.len_sig-1)] += .5
+                offset_range[self.beat_loc[af_end-3]: self.beat_loc[af_end-2]] += .5 
             elif self.class_true == 2:
-                offset_range[self.beat_loc[af_end-1]: ] += 1
-                offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end-1]] += .5
+                offset_range[self.beat_loc[af_end-2]: ] += 1
+                offset_range[self.beat_loc[af_end-3]: self.beat_loc[af_end-2]] += .5
         
         return onset_range, offset_range
     
 def load_ans(ans_file):
+    endpoints_pred = []
     if ans_file.endswith('.json'):
         json_file = open(ans_file, "r")
         ans_dic = json.load(json_file)
@@ -94,7 +95,7 @@ def load_ans(ans_file):
 
     elif ans_file.endswith('.mat'):
         ans_struct = sio.loadmat(ans_file)
-        endpoints_pred = ans_struct['predict_endpoints']
+        endpoints_pred = ans_struct['predict_endpoints']-1
 
     return endpoints_pred
 
@@ -153,10 +154,12 @@ def score(data_path, ans_path):
     return score_avg
 
 if __name__ == '__main__':
-    score_avg = score(sys.argv[1], sys.argv[2])
+    TESTSET_PATH = sys.argv[1]
+    RESULT_PATH = sys.argv[2]
+    score_avg = score(TESTSET_PATH, RESULT_PATH)
     print('AF Endpoints Detection Performance: %0.4f' %score_avg)
 
-    with open(os.path.join(sys.argv[2], 'score.txt'), 'w') as score_file:
+    with open(os.path.join(RESULT_PATH, 'score.txt'), 'w') as score_file:
         print('AF Endpoints Detection Performance: %0.4f' %score_avg, file=score_file)
 
         score_file.close()
