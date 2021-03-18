@@ -8,6 +8,12 @@ import peakutils
 from sklearn import preprocessing
 from scipy import signal
 
+"""
+Written by:  Xingyao Wang, Chengyu Liu
+             School of Instrument Science and Engineering
+             Southeast University, China
+             chengyu@seu.edu.cn
+"""
 
 def p_t_qrs(ecg_original, fs=1000, gr=1):
     delay = 0

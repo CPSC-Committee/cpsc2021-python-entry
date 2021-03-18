@@ -8,6 +8,12 @@ import sys
 import scipy.io as sio
 import wfdb
 
+"""
+Written by:  Xingyao Wang, Chengyu Liu
+             School of Instrument Science and Engineering
+             Southeast University, China
+             chengyu@seu.edu.cn
+"""
 
 R = np.array([[1, -1, -.5], [-2, 1, 0], [-1, 0, 1]])
 

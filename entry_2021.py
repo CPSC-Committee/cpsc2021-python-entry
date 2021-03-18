@@ -7,6 +7,14 @@ import sys
 import wfdb
 from utils import qrs_detect, comp_cosEn, save_dict
 
+"""
+Written by:  Xingyao Wang, Chengyu Liu
+             School of Instrument Science and Engineering
+             Southeast University, China
+             chengyu@seu.edu.cn
+
+Save answers to '.json' files, the format is as {‘predict_endpoints’: [[s0, e0], [s1, e1], …, [sm-1, em-2]]}.
+"""
 
 def load_data(sample_path):
     sig, fields = wfdb.rdsamp(sample_path)
