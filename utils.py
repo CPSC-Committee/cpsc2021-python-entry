@@ -112,7 +112,7 @@ def p_t_qrs(ecg_original, fs=1000, gr=1):
                 y_i = max(ecg_h[0:locs[i]])
                 x_i = np.argmax(ecg_h[0:locs[i]])
                 ser_back = 1
-            elif (locs[i] >= len[ecg_h]):
+            elif (locs[i] >= len(ecg_h)):
                 _ = ecg_h[locs[i] - np.around(0.150*fs).astype(int):]
                 y_i = max(_)
                 x_i = np.argmax(_)
