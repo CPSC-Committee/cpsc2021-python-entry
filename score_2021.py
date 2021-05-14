@@ -140,7 +140,7 @@ def score(data_path, ans_path):
 
         if len(endpoints_pred) == 0:
             class_pred = 0
-        elif len(endpoints_pred) == 1 and np.diff(endpoints_pred)[-1] == TrueRef.len_sig:
+        elif len(endpoints_pred) == 1 and np.diff(endpoints_pred)[-1] == TrueRef.len_sig - 1:
             class_pred = 2
         else:
             class_pred = 1
