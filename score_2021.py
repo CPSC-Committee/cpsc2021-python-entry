@@ -44,9 +44,9 @@ class RefInfo():
 
         if 'non atrial fibrillation' in sample_descrip:
             class_true = 0
-        elif 'paroxysmal atrial fibrillation' in sample_descrip:
-            class_true = 1
         elif 'persistent atrial fibrillation' in sample_descrip:
+            class_true = 1
+        elif 'paroxysmal atrial fibrillation' in sample_descrip:
             class_true = 2
         else:
             print('Error: the recording is out of range!')
