@@ -62,7 +62,7 @@ class RefInfo():
         onset_range = np.zeros((self.len_sig, ),dtype=np.float)
         offset_range = np.zeros((self.len_sig, ),dtype=np.float)
         for i, af_start in enumerate(self.af_starts):
-            if self.class_true == 1:
+            if self.class_true == 2:
                 if max(af_start-1, 0) == 0:
                     onset_range[: self.beat_loc[af_start+2]] += 1
                 elif max(af_start-2, 0) == 0:
@@ -72,11 +72,11 @@ class RefInfo():
                     onset_range[self.beat_loc[af_start-1]: self.beat_loc[af_start+2]] += 1
                     onset_range[self.beat_loc[af_start-2]: self.beat_loc[af_start-1]] += .5
                 onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += .5
-            elif self.class_true == 2:
+            elif self.class_true == 1:
                 onset_range[: self.beat_loc[af_start+2]] += 1
                 onset_range[self.beat_loc[af_start+2]: self.beat_loc[af_start+3]] += .5
         for i, af_end in enumerate(self.af_ends):
-            if self.class_true == 1:
+            if self.class_true == 2:
                 if min(af_end+1, len(self.beat_loc)-1) == len(self.beat_loc)-1:
                     offset_range[self.beat_loc[af_end-2]: ] += 1
                 elif min(af_end+2, len(self.beat_loc)-1) == len(self.beat_loc)-1:
@@ -86,7 +86,7 @@ class RefInfo():
                     offset_range[self.beat_loc[af_end-2]: self.beat_loc[af_end+1]] += 1
                     offset_range[self.beat_loc[af_end+1]: min(self.beat_loc[af_end+2], self.len_sig-1)] += .5
                 offset_range[self.beat_loc[af_end-3]: self.beat_loc[af_end-2]] += .5 
-            elif self.class_true == 2:
+            elif self.class_true == 1:
                 offset_range[self.beat_loc[af_end-2]: ] += 1
                 offset_range[self.beat_loc[af_end-3]: self.beat_loc[af_end-2]] += .5
         
