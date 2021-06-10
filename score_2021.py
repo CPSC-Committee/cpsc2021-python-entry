@@ -21,7 +21,8 @@ class RefInfo():
     def __init__(self, sample_path):
         self.sample_path = sample_path
         self.fs, self.len_sig, self.beat_loc, self.af_starts, self.af_ends, self.class_true = self._load_ref()
-        self.endpoints_true = np.concatenate((self.af_starts, self.af_ends), axis=-1)
+        self.endpoints_true = np.dstack((self.af_starts, self.af_ends))[0, :, :]
+        # self.endpoints_true = np.concatenate((self.af_starts, self.af_ends), axis=-1)
 
         if self.class_true == 1 or self.class_true == 2:
             self.onset_score_range, self.offset_score_range = self._gen_endpoint_score_range()
