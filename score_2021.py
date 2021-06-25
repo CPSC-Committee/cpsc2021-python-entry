@@ -111,9 +111,13 @@ def ue_calculate(endpoints_pred, endpoints_true, onset_score_range, offset_score
     ma = len(endpoints_true)
     mr = len(endpoints_pred)
 
-    for [start, end] in endpoints_pred:
-        score += onset_score_range[int(start)]
-        score += offset_score_range[int(end)]
+    if mr == 0:
+        score = 0
+    
+    else:
+        for [start, end] in endpoints_pred:
+            score += onset_score_range[int(start)]
+            score += offset_score_range[int(end)]
     
     score *= (ma / max(ma, mr))
 
