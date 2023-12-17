@@ -61,7 +61,6 @@ def get_duration(folder_path):
 
 test_categorize_records=categorize_records("D:/RA/Project/Database/CPSC2021/Training_set_II")
 print(len(test_categorize_records))
-
 Counter(itertools.chain.from_iterable(test_categorize_records.values()))
 
 print(test_categorize_records)
