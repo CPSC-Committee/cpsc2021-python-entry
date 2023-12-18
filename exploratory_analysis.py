@@ -145,3 +145,8 @@ def visualize_dataset(df):
 TSOne_df=create_records_dataframe("D:/RA/Project/Database/CPSC2021/Training_set_I")
 #TSOne_df.to_excel("CPSC2021_TS1.xlsx",index=False)
 visualize_dataset(TSOne_df)
+
+TSTwo_df=create_records_dataframe("D:/RA/Project/Database/CPSC2021/Training_set_II")
+#TSOne_df.to_excel("CPSC2021_TS1.xlsx",index=False)
+visualize_dataset(TSTwo_df) 
+
