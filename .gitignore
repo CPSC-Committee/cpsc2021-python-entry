@@ -128,5 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .ipynb_checkpoints 
+<<<<<<< HEAD
 .vscode
 .xlsx
+=======
+
+.vscode
+.xlsx
+>>>>>>> exploratory-ananlysis

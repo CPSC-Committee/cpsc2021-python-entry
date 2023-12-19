@@ -6,3 +6,5 @@ pandas
 peakutils
 scikit_learn
 neurokit2
+tensorflow
+
